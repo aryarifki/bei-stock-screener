@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Screener - BEI Stock Screener{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1><i class="fas fa-filter"></i> Stock Screener</h1>
+        <p>Cari saham dengan kriteria: Open = Previous Close</p>
+    </div>
+
+    <div class="screener-controls">
+        <button id="runScreener" class="btn btn-primary">
+            <i class="fas fa-search"></i> Jalankan Screener
+        </button>
+        <div id="loadingSpinner" class="loading-spinner" style="display: none;">
+            <i class="fas fa-spinner fa-spin"></i> Memproses...
+        </div>
+    </div>
+
+    <div id="resultsContainer" class="results-container" style="display: none;">
+        <h3>Hasil Screening</h3>
+        <div class="table-responsive">
+            <table id="resultsTable" class="data-table">
+                <thead>
+                    <tr>
+                        <th>Kode Saham</th>
+                        <th>Nama Perusahaan</th>
+                        <th>Harga</th>
+                        <th>Volume</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="noResults" class="no-results" style="display: none;">
+        <i class="fas fa-info-circle"></i>
+        <p>Tidak ada saham yang memenuhi kriteria hari ini</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('runScreener').addEventListener('click', function() {
+    const button = this;
+    const spinner = document.getElementById('loadingSpinner');
+    const resultsContainer = document.getElementById('resultsContainer');
+    const noResults = document.getElementById('noResults');
+    const resultsBody = document.getElementById('resultsBody');
+
+    button.disabled = true;
+    spinner.style.display = 'block';
+    resultsContainer.style.display = 'none';
+    noResults.style.display = 'none';
+
+    fetch('/api/screen-open-close')
+        .then(response => response.json())
+        .then(data => {
+            spinner.style.display = 'none';
+            button.disabled = false;
+
+            if (data.length > 0) {
+                resultsBody.innerHTML = '';
+                data.forEach(stock => {
+                    const row = `
+                        <tr>
+                            <td><strong>${stock.symbol}</strong></td>
+                            <td>${stock.name}</td>
+                            <td>Rp ${stock.price.toLocaleString()}</td>
+                            <td>${stock.volume.toLocaleString()}</td>
+                            <td><span class="status-match">✓ Match</span></td>
+                        </tr>
+                    `;
+                    resultsBody.innerHTML += row;
+                });
+                resultsContainer.style.display = 'block';
+            } else {
+                noResults.style.display = 'block';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            spinner.style.display = 'none';
+            button.disabled = false;
+            alert('Terjadi kesalahan saat mengambil data');
+        });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Foreign Flow - BEI Stock Screener{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1><i class="fas fa-globe"></i> Analisis Foreign Flow</h1>
+        <p>Monitor aliran dana investor asing</p>
+    </div>
+
+    <div class="input-section">
+        <div class="input-group">
+            <input type="text" id="stockSymbol" placeholder="Masukkan kode saham (contoh: BBCA)" class="input-field">
+            <button id="analyzeFlow" class="btn btn-primary">
+                <i class="fas fa-search"></i> Analisis
+            </button>
+        </div>
+        <div id="loadingSpinner" class="loading-spinner" style="display: none;">
+            <i class="fas fa-spinner fa-spin"></i> Menganalisis...
+        </div>
+    </div>
+
+    <div id="flowResults" class="flow-results" style="display: none;">
+        <div class="flow-summary">
+            <div class="flow-card flow-buy">
+                <div class="flow-icon">
+                    <i class="fas fa-arrow-up"></i>
+                </div>
+                <div class="flow-info">
+                    <h4>Foreign Buy</h4>
+                    <p id="foreignBuy">-</p>
+                </div>
+            </div>
+
+            <div class="flow-card flow-sell">
+                <div class="flow-icon">
+                    <i class="fas fa-arrow-down"></i>
+                </div>
+                <div class="flow-info">
+                    <h4>Foreign Sell</h4>
+                    <p id="foreignSell">-</p>
+                </div>
+            </div>
+
+            <div class="flow-card flow-net">
+                <div class="flow-icon">
+                    <i class="fas fa-balance-scale"></i>
+                </div>
+                <div class="flow-info">
+                    <h4>Net Flow</h4>
+                    <p id="netFlow">-</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="flow-chart">
+            <h3>Visualisasi Aliran Dana</h3>
+            <div class="chart-container">
+                <div class="chart-bar">
+                    <div class="bar-label">Foreign Buy</div>
+                    <div class="bar-wrapper">
+                        <div id="buyBar" class="bar bar-green"></div>
+                        <span id="buyAmount" class="bar-amount"></span>
+                    </div>
+                </div>
+                <div class="chart-bar">
+                    <div class="bar-label">Foreign Sell</div>
+                    <div class="bar-wrapper">
+                        <div id="sellBar" class="bar bar-red"></div>
+                        <span id="sellAmount" class="bar-amount"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('analyzeFlow').addEventListener('click', function() {
+    const symbol = document.getElementById('stockSymbol').value.toUpperCase();
+    if (!symbol) {
+        alert('Harap masukkan kode saham');
+        return;
+    }
+
+    const button = this;
+    const spinner = document.getElementById('loadingSpinner');
+    const results = document.getElementById('flowResults');
+
+    button.disabled = true;
+    spinner.style.display = 'block';
+    results.style.display = 'none';
+
+    fetch(`/api/foreign-flow/${symbol}`)
+        .then(response => response.json())
+        .then(data => {
+            spinner.style.display = 'none';
+            button.disabled = false;
+
+            // Update summary cards
+            document.getElementById('foreignBuy').textContent = `Rp ${data.foreign_buy.toLocaleString()}`;
+            document.getElementById('foreignSell').textContent = `Rp ${data.foreign_sell.toLocaleString()}`;
+            
+            const netFlow = document.getElementById('netFlow');
+            netFlow.textContent = `Rp ${Math.abs(data.net_flow).toLocaleString()}`;
+            netFlow.className = data.net_flow >= 0 ? 'text-green' : 'text-red';
+
+            // Update chart
+            const maxValue = Math.max(data.foreign_buy, data.foreign_sell);
+            const buyPercentage = (data.foreign_buy / maxValue) * 100;
+            const sellPercentage = (data.foreign_sell / maxValue) * 100;
+
+            document.getElementById('buyBar').style.width = buyPercentage + '%';
+            document.getElementById('sellBar').style.width = sellPercentage + '%';
+            
+            document.getElementById('buyAmount').textContent = `Rp ${data.foreign_buy.toLocaleString()}`;
+            document.getElementById('sellAmount').textContent = `Rp ${data.foreign_sell.toLocaleString()}`;
+
+            results.style.display = 'block';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            spinner.style.display = 'none';
+            button.disabled = false;
+            alert('Terjadi kesalahan saat mengambil data');
+        });
+});
+
+// Enter key support
+document.getElementById('stockSymbol').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        document.getElementById('analyzeFlow').click();
+    }
+});
+</script>
+{% endblock %}

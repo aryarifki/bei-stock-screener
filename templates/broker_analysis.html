@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Broker Analysis - BEI Stock Screener{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1><i class="fas fa-users"></i> Analisis Bandarmology</h1>
+        <p>Lihat aktivitas broker pada saham tertentu</p>
+    </div>
+
+    <div class="input-section">
+        <div class="input-group">
+            <input type="text" id="stockSymbol" placeholder="Masukkan kode saham (contoh: BBCA)" class="input-field">
+            <button id="analyzeBroker" class="btn btn-primary">
+                <i class="fas fa-search"></i> Analisis
+            </button>
+        </div>
+        <div id="loadingSpinner" class="loading-spinner" style="display: none;">
+            <i class="fas fa-spinner fa-spin"></i> Menganalisis...
+        </div>
+    </div>
+
+    <div id="brokerResults" class="broker-results" style="display: none;">
+        <div class="broker-section">
+            <h3><i class="fas fa-arrow-up text-green"></i> Top Buyers</h3>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Broker</th>
+                            <th>Net Buy</th>
+                        </tr>
+                    </thead>
+                    <tbody id="buyersTable">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="broker-section">
+            <h3><i class="fas fa-arrow-down text-red"></i> Top Sellers</h3>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Broker</th>
+                            <th>Net Sell</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sellersTable">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('analyzeBroker').addEventListener('click', function() {
+    const symbol = document.getElementById('stockSymbol').value.toUpperCase();
+    if (!symbol) {
+        alert('Harap masukkan kode saham');
+        return;
+    }
+
+    const button = this;
+    const spinner = document.getElementById('loadingSpinner');
+    const results = document.getElementById('brokerResults');
+
+    button.disabled = true;
+    spinner.style.display = 'block';
+    results.style.display = 'none';
+
+    fetch(`/api/broker-summary/${symbol}`)
+        .then(response => response.json())
+        .then(data => {
+            spinner.style.display = 'none';
+            button.disabled = false;
+
+            // Populate buyers table
+            const buyersTable = document.getElementById('buyersTable');
+            buyersTable.innerHTML = '';
+            data.top_buyers.forEach(buyer => {
+                buyersTable.innerHTML += `
+                    <tr>
+                        <td>${buyer.broker}</td>
+                        <td class="text-green">Rp ${buyer.net_buy.toLocaleString()}</td>
+                    </tr>
+                `;
+            });
+
+            // Populate sellers table
+            const sellersTable = document.getElementById('sellersTable');
+            sellersTable.innerHTML = '';
+            data.top_sellers.forEach(seller => {
+                sellersTable.innerHTML += `
+                    <tr>
+                        <td>${seller.broker}</td>
+                        <td class="text-red">Rp ${seller.net_sell.toLocaleString()}</td>
+                    </tr>
+                `;
+            });
+
+            results.style.display = 'block';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            spinner.style.display = 'none';
+            button.disabled = false;
+            alert('Terjadi kesalahan saat mengambil data');
+        });
+});
+
+// Enter key support
+document.getElementById('stockSymbol').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        document.getElementById('analyzeBroker').click();
+    }
+});
+</script>
+{% endblock %}
