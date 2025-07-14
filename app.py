@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, jsonify
 import requests
-import pandas as pd
+import polars as pl
 from datetime import datetime, timedelta
 import json
 import time
@@ -358,24 +358,45 @@ def foreign_flow():
 @app.route('/api/screen-open-close')
 def screen_open_close():
     """Find stocks where today's open equals yesterday's close"""
-    results = []
+    # Collect all stock data first
+    all_stock_data = []
     
     for symbol in BEI_STOCKS:
         data = get_stock_data(symbol)
         if data:
-            # Check if today's open equals yesterday's close (with small tolerance)
-            if abs(data["today_open"] - data["yesterday_close"]) < 0.01:
-                results.append({
-                    "symbol": symbol.replace(".JK", ""),
-                    "name": STOCK_NAMES.get(symbol, "Unknown"),
-                    "price": data["price"],
-                    "volume": data["volume"],
-                    "today_open": data["today_open"],
-                    "yesterday_close": data["yesterday_close"]
-                })
+            all_stock_data.append({
+                "symbol": symbol,
+                "name": STOCK_NAMES.get(symbol, "Unknown"),
+                "price": data["price"],
+                "volume": data["volume"],
+                "today_open": data["today_open"],
+                "yesterday_close": data["yesterday_close"],
+                "difference": abs(data["today_open"] - data["yesterday_close"])
+            })
         
         # Rate limiting
         time.sleep(0.1)
+    
+    if not all_stock_data:
+        return jsonify([])
+    
+    # Convert to Polars DataFrame for efficient filtering
+    df = pl.DataFrame(all_stock_data)
+    
+    # Filter stocks where today's open equals yesterday's close (with small tolerance)
+    filtered_df = df.filter(pl.col("difference") < 0.01)
+    
+    # Convert back to list of dictionaries for JSON response, clean up symbol names
+    results = filtered_df.with_columns([
+        pl.col("symbol").str.replace(".JK", "").alias("clean_symbol")
+    ]).select([
+        pl.col("clean_symbol").alias("symbol"),
+        "name",
+        "price", 
+        "volume",
+        "today_open",
+        "yesterday_close"
+    ]).to_dicts()
     
     return jsonify(results)
 
@@ -387,24 +408,26 @@ def broker_summary(symbol):
     
     brokers = ["UBS", "Goldman Sachs", "Morgan Stanley", "Mandiri Sekuritas", "BCA Sekuritas"]
     
-    top_buyers = []
-    top_sellers = []
-    
-    for i in range(5):
-        top_buyers.append({
+    # Generate broker data
+    broker_data = []
+    for i in range(10):  # Generate more data to better demonstrate polars sorting
+        broker_data.append({
             "broker": random.choice(brokers),
-            "net_buy": random.randint(1000000, 50000000)
-        })
-        
-        top_sellers.append({
-            "broker": random.choice(brokers),
+            "net_buy": random.randint(1000000, 50000000),
             "net_sell": random.randint(1000000, 50000000)
         })
     
+    # Use Polars for efficient data processing and sorting
+    df = pl.DataFrame(broker_data)
+    
+    # Get top 5 buyers and sellers using polars
+    top_buyers_df = df.sort("net_buy", descending=True).head(5)
+    top_sellers_df = df.sort("net_sell", descending=True).head(5)
+    
     return jsonify({
         "symbol": symbol,
-        "top_buyers": sorted(top_buyers, key=lambda x: x["net_buy"], reverse=True),
-        "top_sellers": sorted(top_sellers, key=lambda x: x["net_sell"], reverse=True)
+        "top_buyers": top_buyers_df.select(["broker", "net_buy"]).to_dicts(),
+        "top_sellers": top_sellers_df.select(["broker", "net_sell"]).to_dicts()
     })
 
 @app.route('/api/foreign-flow/<symbol>')
