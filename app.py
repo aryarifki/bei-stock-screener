@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify
 import requests
-import polars as pl
+import pandas as pd
+import numpy as np
 from datetime import datetime, timedelta
 import json
 import time
@@ -380,23 +381,24 @@ def screen_open_close():
     if not all_stock_data:
         return jsonify([])
     
-    # Convert to Polars DataFrame for efficient filtering
-    df = pl.DataFrame(all_stock_data)
+    # Convert to Pandas DataFrame for efficient filtering
+    df = pd.DataFrame(all_stock_data)
     
     # Filter stocks where today's open equals yesterday's close (with small tolerance)
-    filtered_df = df.filter(pl.col("difference") < 0.01)
+    filtered_df = df[df["difference"] < 0.01]
     
     # Convert back to list of dictionaries for JSON response, clean up symbol names
-    results = filtered_df.with_columns([
-        pl.col("symbol").str.replace(".JK", "").alias("clean_symbol")
-    ]).select([
-        pl.col("clean_symbol").alias("symbol"),
-        "name",
-        "price", 
-        "volume",
-        "today_open",
-        "yesterday_close"
-    ]).to_dicts()
+    if not filtered_df.empty:
+        # Add clean_symbol column by removing .JK suffix
+        filtered_df = filtered_df.copy()
+        filtered_df["clean_symbol"] = filtered_df["symbol"].str.replace(".JK", "", regex=False)
+        
+        # Select relevant columns and convert to records
+        results = filtered_df[["clean_symbol", "name", "price", "volume", "today_open", "yesterday_close"]].rename(
+            columns={"clean_symbol": "symbol"}
+        ).to_dict('records')
+    else:
+        results = []
     
     return jsonify(results)
 
@@ -410,24 +412,24 @@ def broker_summary(symbol):
     
     # Generate broker data
     broker_data = []
-    for i in range(10):  # Generate more data to better demonstrate polars sorting
+    for i in range(10):  # Generate more data to better demonstrate pandas sorting
         broker_data.append({
             "broker": random.choice(brokers),
             "net_buy": random.randint(1000000, 50000000),
             "net_sell": random.randint(1000000, 50000000)
         })
     
-    # Use Polars for efficient data processing and sorting
-    df = pl.DataFrame(broker_data)
+    # Use Pandas for efficient data processing and sorting
+    df = pd.DataFrame(broker_data)
     
-    # Get top 5 buyers and sellers using polars
-    top_buyers_df = df.sort("net_buy", descending=True).head(5)
-    top_sellers_df = df.sort("net_sell", descending=True).head(5)
+    # Get top 5 buyers and sellers using pandas
+    top_buyers_df = df.nlargest(5, "net_buy")
+    top_sellers_df = df.nlargest(5, "net_sell")
     
     return jsonify({
         "symbol": symbol,
-        "top_buyers": top_buyers_df.select(["broker", "net_buy"]).to_dicts(),
-        "top_sellers": top_sellers_df.select(["broker", "net_sell"]).to_dicts()
+        "top_buyers": top_buyers_df[["broker", "net_buy"]].to_dict('records'),
+        "top_sellers": top_sellers_df[["broker", "net_sell"]].to_dict('records')
     })
 
 @app.route('/api/foreign-flow/<symbol>')
